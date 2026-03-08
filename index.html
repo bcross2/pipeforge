@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PipeForge — Visual Linux Pipeline Builder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg-deep:#060a12;--bg-primary:#0a1019;--bg-secondary:#0f1726;
+  --bg-card:#141e30;--bg-card-hover:#1a2840;--bg-surface:#1c2a42;
+  --border:#1e2d47;--border-light:#2a3f5f;--border-active:#3b5998;
+  --cyan:#06d6a0;--cyan-dim:#06d6a050;--cyan-glow:rgba(6,214,160,.25);
+  --amber:#f4a261;--amber-dim:#f4a26150;--amber-glow:rgba(244,162,97,.2);
+  --rose:#ef476f;--rose-dim:#ef476f50;
+  --text:#e0e7ef;--text-muted:#8899aa;--text-dim:#556677;
+  --font-display:'Rajdhani',sans-serif;--font-mono:'Fira Code',monospace;
+}
+html,body{height:100%;overflow:hidden}
+body{
+  font-family:var(--font-mono);color:var(--text);
+  background:var(--bg-deep);display:flex;flex-direction:column;
+}
+/* === SCANLINE OVERLAY === */
+body::after{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.03) 2px,rgba(0,0,0,.03) 4px);
+}
+/* === LAYOUT === */
+#app{display:grid;grid-template-columns:220px 1fr;grid-template-rows:1fr auto;height:100vh;overflow:hidden}
+/* === SIDEBAR === */
+#sidebar{
+  grid-row:1/-1;background:var(--bg-primary);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow-y:auto;
+}
+.sidebar-brand{
+  padding:20px 16px 8px;border-bottom:1px solid var(--border);
+  text-align:center;
+}
+.sidebar-brand h1{
+  font-family:var(--font-display);font-size:28px;font-weight:700;
+  letter-spacing:6px;color:var(--cyan);
+  text-shadow:0 0 20px var(--cyan-glow),0 0 40px var(--cyan-glow);
+}
+.sidebar-brand p{
+  font-size:10px;color:var(--text-dim);letter-spacing:3px;
+  text-transform:uppercase;margin-top:2px;
+}
+.cmd-group{padding:12px 12px 4px}
+.cmd-group-label{
+  font-family:var(--font-display);font-size:11px;font-weight:600;
+  color:var(--text-dim);letter-spacing:2px;text-transform:uppercase;
+  margin-bottom:8px;padding-left:4px;
+}
+.cmd-card{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 10px;margin-bottom:6px;border-radius:6px;
+  background:var(--bg-card);border:1px solid var(--border);
+  cursor:grab;transition:all .15s ease;user-select:none;
+}
+.cmd-card:hover{background:var(--bg-card-hover);border-color:var(--border-light);transform:translateX(3px)}
+.cmd-card:active{cursor:grabbing;opacity:.7}
+.cmd-card .cmd-icon{
+  width:32px;height:32px;border-radius:5px;display:flex;
+  align-items:center;justify-content:center;font-size:13px;
+  font-weight:600;flex-shrink:0;
+  background:var(--bg-secondary);color:var(--cyan);
+  border:1px solid var(--cyan-dim);
+}
+.cmd-card .cmd-info{display:flex;flex-direction:column;min-width:0}
+.cmd-card .cmd-name{font-size:12px;font-weight:600;color:var(--text)}
+.cmd-card .cmd-excel{font-size:9px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* === MAIN WORKSPACE === */
+#workspace{display:flex;flex-direction:column;overflow:hidden}
+
+/* === PIPELINE AREA === */
+#pipeline-area{
+  flex:0 0 auto;min-height:160px;padding:16px 20px;
+  border-bottom:1px solid var(--border);
+  display:flex;flex-direction:column;
+}
+.pipeline-header{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:12px;
+}
+.pipeline-header span{
+  font-family:var(--font-display);font-size:12px;font-weight:600;
+  color:var(--text-dim);letter-spacing:2px;text-transform:uppercase;
+}
+.pipeline-header button{
+  font-family:var(--font-mono);font-size:10px;padding:4px 10px;
+  background:var(--bg-card);border:1px solid var(--border);color:var(--text-muted);
+  border-radius:4px;cursor:pointer;transition:all .15s;
+}
+.pipeline-header button:hover{border-color:var(--rose);color:var(--rose)}
+
+#pipeline-canvas{
+  flex:1;display:flex;align-items:center;gap:0;
+  padding:10px 12px;border-radius:8px;min-height:90px;
+  background:var(--bg-secondary);border:1px dashed var(--border);
+  overflow-x:auto;overflow-y:hidden;transition:border-color .2s;
+}
+#pipeline-canvas.drag-over{border-color:var(--cyan);background:rgba(6,214,160,.03)}
+#pipeline-canvas.empty::before{
+  content:'Drag commands here to build your pipeline';
+  color:var(--text-dim);font-size:12px;width:100%;text-align:center;
+}
+
+/* Pipeline blocks */
+.pipe-block{
+  flex-shrink:0;padding:10px 14px;border-radius:8px;
+  background:var(--bg-card);border:1px solid var(--border);
+  cursor:pointer;transition:all .15s;position:relative;min-width:100px;
+}
+.pipe-block:hover{border-color:var(--border-light);background:var(--bg-card-hover)}
+.pipe-block.selected{
+  border-color:var(--cyan);
+  box-shadow:0 0 15px var(--cyan-glow),0 0 30px rgba(6,214,160,.08);
+}
+.pipe-block .block-header{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.pipe-block .block-name{
+  font-size:13px;font-weight:600;color:var(--cyan);
+  font-family:var(--font-display);letter-spacing:1px;
+}
+.pipe-block .block-remove{
+  width:16px;height:16px;border-radius:50%;background:none;border:none;
+  color:var(--text-dim);cursor:pointer;font-size:11px;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .15s;opacity:0;
+}
+.pipe-block:hover .block-remove{opacity:1}
+.pipe-block .block-remove:hover{color:var(--rose);background:var(--rose-dim)}
+.pipe-block .block-excel{font-size:9px;color:var(--text-dim);margin-top:2px}
+.pipe-block .block-config-preview{
+  font-size:10px;color:var(--amber);margin-top:6px;
+  max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+
+/* Connectors */
+.pipe-connector{
+  flex-shrink:0;width:36px;display:flex;align-items:center;justify-content:center;
+  position:relative;height:40px;
+}
+.pipe-connector::before{
+  content:'';position:absolute;top:50%;left:0;right:0;height:2px;
+  background:repeating-linear-gradient(90deg,var(--cyan-dim) 0,var(--cyan-dim) 5px,transparent 5px,transparent 10px);
+  animation:flow .8s linear infinite;
+}
+.pipe-connector::after{
+  content:'';position:absolute;right:-1px;top:50%;transform:translateY(-50%);
+  border:5px solid transparent;border-left:6px solid var(--cyan-dim);
+}
+@keyframes flow{from{background-position:0 0}to{background-position:10px 0}}
+
+/* File input block */
+.file-block{
+  flex-shrink:0;padding:8px 14px;border-radius:8px;
+  background:var(--bg-surface);border:1px solid var(--border-light);
+}
+.file-block .file-label{font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px}
+.file-block .file-name{font-size:12px;color:var(--amber);margin-top:2px}
+
+/* Drop zone at end */
+.drop-zone-end{
+  flex-shrink:0;width:80px;height:70px;border-radius:8px;
+  border:2px dashed var(--border);display:flex;align-items:center;
+  justify-content:center;color:var(--text-dim);font-size:20px;
+  transition:all .2s;margin-left:0;
+}
+.drop-zone-end.drag-over{border-color:var(--cyan);color:var(--cyan);background:rgba(6,214,160,.05)}
+
+/* === BOTTOM SECTION: Config + Preview === */
+#bottom-section{
+  flex:1;display:grid;grid-template-columns:1fr 1fr;
+  overflow:hidden;min-height:0;
+}
+#bottom-section.no-selection{grid-template-columns:0 1fr}
+
+/* Config panel */
+#config-panel{
+  background:var(--bg-primary);border-right:1px solid var(--border);
+  padding:16px;overflow-y:auto;transition:all .2s;
+}
+#bottom-section.no-selection #config-panel{padding:0;overflow:hidden;opacity:0}
+.config-title{
+  font-family:var(--font-display);font-size:12px;font-weight:600;
+  color:var(--text-dim);letter-spacing:2px;text-transform:uppercase;
+  margin-bottom:14px;display:flex;align-items:center;gap:8px;
+}
+.config-title .cmd-label{color:var(--cyan);font-size:14px}
+.config-field{margin-bottom:12px}
+.config-field label{
+  display:block;font-size:10px;color:var(--text-muted);
+  letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;
+}
+.config-field input[type="text"],
+.config-field input[type="number"],
+.config-field select{
+  width:100%;padding:7px 10px;border-radius:5px;font-size:12px;
+  font-family:var(--font-mono);color:var(--text);
+  background:var(--bg-card);border:1px solid var(--border);
+  outline:none;transition:border-color .15s;
+}
+.config-field input:focus,.config-field select:focus{border-color:var(--cyan)}
+.config-field input::placeholder{color:var(--text-dim)}
+.config-row{display:flex;gap:8px}
+.config-row .config-field{flex:1}
+.config-check{
+  display:flex;align-items:center;gap:8px;margin-bottom:8px;
+}
+.config-check input[type="checkbox"]{
+  appearance:none;width:16px;height:16px;border-radius:3px;
+  background:var(--bg-card);border:1px solid var(--border);cursor:pointer;
+  position:relative;flex-shrink:0;
+}
+.config-check input[type="checkbox"]:checked{background:var(--cyan);border-color:var(--cyan)}
+.config-check input[type="checkbox"]:checked::after{
+  content:'';position:absolute;left:5px;top:2px;width:4px;height:8px;
+  border:solid var(--bg-deep);border-width:0 2px 2px 0;transform:rotate(45deg);
+}
+.config-check label{font-size:11px;color:var(--text-muted);cursor:pointer}
+
+/* === DATA PREVIEW === */
+#data-preview{
+  background:var(--bg-secondary);padding:16px;overflow:auto;
+}
+.preview-header{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:10px;
+}
+.preview-header .preview-label{
+  font-family:var(--font-display);font-size:12px;font-weight:600;
+  color:var(--text-dim);letter-spacing:2px;text-transform:uppercase;
+}
+.preview-header .preview-stage{
+  font-size:10px;color:var(--cyan);
+  background:var(--bg-card);padding:3px 8px;border-radius:4px;
+}
+.preview-header .row-count{font-size:10px;color:var(--text-dim);margin-left:8px}
+#preview-content{
+  font-size:11px;line-height:1.6;overflow:auto;
+}
+#preview-content table{
+  border-collapse:collapse;width:100%;
+}
+#preview-content th{
+  text-align:left;padding:6px 12px;font-size:10px;
+  color:var(--amber);border-bottom:1px solid var(--border-light);
+  letter-spacing:1px;text-transform:uppercase;font-weight:500;
+  position:sticky;top:0;background:var(--bg-secondary);
+}
+#preview-content td{
+  padding:5px 12px;border-bottom:1px solid var(--border);
+  color:var(--text);font-size:11px;white-space:nowrap;
+}
+#preview-content tr:hover td{background:var(--bg-card)}
+.preview-raw{
+  white-space:pre;color:var(--text);padding:8px;
+  background:var(--bg-card);border-radius:6px;
+  overflow:auto;max-height:300px;font-size:11px;line-height:1.7;
+}
+.preview-raw .line-num{
+  display:inline-block;width:28px;text-align:right;
+  color:var(--text-dim);margin-right:12px;user-select:none;
+}
+
+/* === COMMAND BAR === */
+#command-bar{
+  grid-column:1/-1;background:var(--bg-primary);
+  border-top:1px solid var(--border);padding:10px 20px;
+  display:flex;align-items:center;gap:16px;
+}
+.command-label{
+  font-family:var(--font-display);font-size:10px;font-weight:600;
+  color:var(--text-dim);letter-spacing:2px;text-transform:uppercase;
+  flex-shrink:0;
+}
+.command-prompt{color:var(--cyan);margin-right:4px}
+#command-output{
+  flex:1;padding:8px 14px;border-radius:6px;font-size:12px;
+  background:var(--bg-deep);border:1px solid var(--border);
+  color:var(--text);overflow-x:auto;white-space:nowrap;min-height:20px;
+}
+#command-output:empty::before{content:'// your pipeline command will appear here';color:var(--text-dim);font-style:italic}
+#copy-btn{
+  font-family:var(--font-display);font-size:12px;font-weight:600;
+  padding:8px 20px;border-radius:6px;cursor:pointer;
+  background:var(--cyan);color:var(--bg-deep);border:none;
+  letter-spacing:2px;text-transform:uppercase;
+  transition:all .15s;flex-shrink:0;
+}
+#copy-btn:hover{filter:brightness(1.15);transform:scale(1.03)}
+#copy-btn.copied{background:var(--amber)}
+
+/* === SCROLLBAR === */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--border-light)}
+
+/* === ANIMATIONS === */
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.pipe-block{animation:fadeIn .2s ease}
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div class="sidebar-brand">
+      <h1>PIPEFORGE</h1>
+      <p>Pipeline Builder</p>
+    </div>
+    <div id="command-palette"></div>
+  </aside>
+
+  <div id="workspace">
+    <div id="pipeline-area">
+      <div class="pipeline-header">
+        <span>Pipeline</span>
+        <button id="clear-btn" onclick="clearPipeline()">Clear All</button>
+      </div>
+      <div id="pipeline-canvas"></div>
+    </div>
+    <div id="bottom-section" class="no-selection">
+      <div id="config-panel"></div>
+      <div id="data-preview">
+        <div class="preview-header">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="preview-label">Data Preview</span>
+            <span class="preview-stage" id="preview-stage">Input Data</span>
+            <span class="row-count" id="row-count"></span>
+          </div>
+        </div>
+        <div id="preview-content"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer id="command-bar">
+    <span class="command-label"><span class="command-prompt">$</span> Command</span>
+    <code id="command-output"></code>
+    <button id="copy-btn" onclick="copyCommand()">Copy</button>
+  </footer>
+</div>
+
+<script>
+// ===== COMMAND DEFINITIONS =====
+const COMMANDS = {
+  grep: {
+    label:'grep', excel:'Ctrl+F / Filter', group:'filter',
+    icon:'Gp', defaults:{pattern:'',ignoreCase:false,invert:false},
+    config:[
+      {key:'pattern',type:'text',label:'Search Pattern',placeholder:'e.g. North'},
+      {key:'ignoreCase',type:'check',label:'Case insensitive (-i)'},
+      {key:'invert',type:'check',label:'Invert match (-v)'},
+    ]
+  },
+  awk: {
+    label:'awk', excel:'Column filter + math', group:'filter',
+    icon:'Ak', defaults:{condition:'',action:'print $0',delimiter:','},
+    config:[
+      {key:'condition',type:'text',label:'Condition',placeholder:"e.g. $3 == \"North\""},
+      {key:'action',type:'text',label:'Action',placeholder:'e.g. print $2, $4'},
+      {key:'delimiter',type:'text',label:'Delimiter (-F)',placeholder:','},
+    ]
+  },
+  cut: {
+    label:'cut', excel:'Select columns', group:'transform',
+    icon:'Ct', defaults:{delimiter:',',fields:''},
+    config:[
+      {key:'delimiter',type:'text',label:'Delimiter (-d)',placeholder:','},
+      {key:'fields',type:'text',label:'Fields (-f)',placeholder:'e.g. 1,3 or 2-4'},
+    ]
+  },
+  sed: {
+    label:'sed', excel:'Find & Replace', group:'transform',
+    icon:'Sd', defaults:{pattern:'',replacement:'',global:true},
+    config:[
+      {key:'pattern',type:'text',label:'Find Pattern',placeholder:'e.g. North'},
+      {key:'replacement',type:'text',label:'Replace With',placeholder:'e.g. NORTH'},
+      {key:'global',type:'check',label:'Replace all occurrences (g)'},
+    ]
+  },
+  tr: {
+    label:'tr', excel:'SUBSTITUTE (chars)', group:'transform',
+    icon:'Tr', defaults:{from:'',to:'',squeeze:false,delete:false},
+    config:[
+      {key:'from',type:'text',label:'From chars',placeholder:'e.g. a-z'},
+      {key:'to',type:'text',label:'To chars',placeholder:'e.g. A-Z'},
+      {key:'squeeze',type:'check',label:'Squeeze repeats (-s)'},
+      {key:'delete',type:'check',label:'Delete chars (-d)'},
+    ]
+  },
+  sort: {
+    label:'sort', excel:'Sort A-Z / Z-A', group:'aggregate',
+    icon:'St', defaults:{key:'',numeric:false,reverse:false,delimiter:','},
+    config:[
+      {key:'key',type:'text',label:'Sort key column (-k)',placeholder:'e.g. 4'},
+      {key:'delimiter',type:'text',label:'Delimiter (-t)',placeholder:','},
+      {key:'numeric',type:'check',label:'Numeric sort (-n)'},
+      {key:'reverse',type:'check',label:'Reverse order (-r)'},
+    ]
+  },
+  uniq: {
+    label:'uniq', excel:'Remove Duplicates', group:'aggregate',
+    icon:'Uq', defaults:{count:false,duplicatesOnly:false},
+    config:[
+      {key:'count',type:'check',label:'Show counts (-c)'},
+      {key:'duplicatesOnly',type:'check',label:'Only duplicates (-d)'},
+    ]
+  },
+  wc: {
+    label:'wc', excel:'COUNTA / Count', group:'aggregate',
+    icon:'Wc', defaults:{lines:true,words:false,chars:false},
+    config:[
+      {key:'lines',type:'check',label:'Count lines (-l)'},
+      {key:'words',type:'check',label:'Count words (-w)'},
+      {key:'chars',type:'check',label:'Count characters (-c)'},
+    ]
+  },
+  head: {
+    label:'head', excel:'Top N rows', group:'limit',
+    icon:'Hd', defaults:{lines:5},
+    config:[
+      {key:'lines',type:'number',label:'Number of lines (-n)',placeholder:'5'},
+    ]
+  },
+  tail: {
+    label:'tail', excel:'Bottom N rows', group:'limit',
+    icon:'Tl', defaults:{lines:5},
+    config:[
+      {key:'lines',type:'number',label:'Number of lines (-n)',placeholder:'5'},
+    ]
+  },
+  tee: {
+    label:'tee', excel:'Save + pass through', group:'output',
+    icon:'Te', defaults:{filename:'output.csv'},
+    config:[
+      {key:'filename',type:'text',label:'Save to file',placeholder:'output.csv'},
+    ]
+  },
+};
+
+const GROUPS = [
+  {id:'filter',label:'Filter'},
+  {id:'transform',label:'Transform'},
+  {id:'aggregate',label:'Aggregate'},
+  {id:'limit',label:'Limit'},
+  {id:'output',label:'Output'},
+];
+
+const SAMPLE_DATA = `date,product,region,amount
+2026-01-05,Widget,North,150
+2026-01-08,Gadget,South,200
+2026-01-12,Widget,East,175
+2026-01-15,Doohickey,North,300
+2026-01-20,Gadget,North,250
+2026-02-01,Widget,South,125
+2026-02-05,Doohickey,East,275
+2026-02-10,Gadget,North,180
+2026-02-14,Widget,North,210`.trim();
+
+// ===== STATE =====
+let state = {
+  pipeline: [],  // [{id, type, config}]
+  selectedId: null,
+  nextId: 1,
+};
+
+// ===== RENDER SIDEBAR =====
+function renderSidebar() {
+  const el = document.getElementById('command-palette');
+  el.innerHTML = GROUPS.map(g => {
+    const cmds = Object.entries(COMMANDS).filter(([,c]) => c.group === g.id);
+    return `<div class="cmd-group">
+      <div class="cmd-group-label">${g.label}</div>
+      ${cmds.map(([key, c]) => `
+        <div class="cmd-card" draggable="true" data-cmd="${key}">
+          <div class="cmd-icon">${c.icon}</div>
+          <div class="cmd-info">
+            <div class="cmd-name">${c.label}</div>
+            <div class="cmd-excel">${c.excel}</div>
+          </div>
+        </div>`).join('')}
+    </div>`;
+  }).join('');
+
+  el.querySelectorAll('.cmd-card').forEach(card => {
+    card.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('text/plain', card.dataset.cmd);
+      e.dataTransfer.effectAllowed = 'copy';
+    });
+    card.addEventListener('dblclick', () => {
+      addBlock(card.dataset.cmd);
+    });
+  });
+}
+
+// ===== RENDER PIPELINE =====
+function renderPipeline() {
+  const canvas = document.getElementById('pipeline-canvas');
+  const isEmpty = state.pipeline.length === 0;
+  canvas.classList.toggle('empty', isEmpty);
+
+  if (isEmpty) {
+    canvas.innerHTML = '';
+    renderDropZone(canvas);
+    return;
+  }
+
+  let html = `<div class="file-block"><div class="file-label">Input</div><div class="file-name">sample_sales.csv</div></div>`;
+
+  state.pipeline.forEach((block, i) => {
+    const cmd = COMMANDS[block.type];
+    const preview = getConfigPreview(block);
+    const selected = block.id === state.selectedId ? ' selected' : '';
+    html += `<div class="pipe-connector"></div>`;
+    html += `<div class="pipe-block${selected}" data-id="${block.id}">
+      <div class="block-header">
+        <span class="block-name">${cmd.label}</span>
+        <button class="block-remove" data-remove="${block.id}">&times;</button>
+      </div>
+      <div class="block-excel">${cmd.excel}</div>
+      ${preview ? `<div class="block-config-preview">${escHtml(preview)}</div>` : ''}
+    </div>`;
+  });
+
+  canvas.innerHTML = html;
+  renderDropZone(canvas);
+
+  canvas.querySelectorAll('.pipe-block').forEach(el => {
+    el.addEventListener('click', () => selectBlock(parseInt(el.dataset.id)));
+  });
+  canvas.querySelectorAll('.block-remove').forEach(el => {
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      removeBlock(parseInt(el.dataset.remove));
+    });
+  });
+}
+
+function renderDropZone(canvas) {
+  const zone = document.createElement('div');
+  if (state.pipeline.length > 0) {
+    const conn = document.createElement('div');
+    conn.className = 'pipe-connector';
+    canvas.appendChild(conn);
+  }
+  zone.className = 'drop-zone-end';
+  zone.textContent = '+';
+  canvas.appendChild(zone);
+
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    const cmd = e.dataTransfer.getData('text/plain');
+    if (COMMANDS[cmd]) addBlock(cmd);
+  });
+}
+
+// ===== CANVAS DRAG/DROP =====
+function setupCanvasDrop() {
+  const canvas = document.getElementById('pipeline-canvas');
+  canvas.addEventListener('dragover', e => {
+    e.preventDefault();
+    canvas.classList.add('drag-over');
+  });
+  canvas.addEventListener('dragleave', e => {
+    if (!canvas.contains(e.relatedTarget)) canvas.classList.remove('drag-over');
+  });
+  canvas.addEventListener('drop', e => {
+    canvas.classList.remove('drag-over');
+  });
+}
+
+// ===== CONFIG PANEL =====
+function renderConfig() {
+  const panel = document.getElementById('config-panel');
+  const section = document.getElementById('bottom-section');
+  const block = state.pipeline.find(b => b.id === state.selectedId);
+
+  if (!block) {
+    section.classList.add('no-selection');
+    panel.innerHTML = '';
+    return;
+  }
+
+  section.classList.remove('no-selection');
+  const cmd = COMMANDS[block.type];
+
+  panel.innerHTML = `
+    <div class="config-title">Configure <span class="cmd-label">${cmd.label}</span></div>
+    ${cmd.config.map(f => {
+      if (f.type === 'check') {
+        return `<div class="config-check">
+          <input type="checkbox" id="cfg-${f.key}" ${block.config[f.key] ? 'checked' : ''} data-key="${f.key}">
+          <label for="cfg-${f.key}">${f.label}</label>
+        </div>`;
+      }
+      if (f.type === 'number') {
+        return `<div class="config-field">
+          <label>${f.label}</label>
+          <input type="number" value="${block.config[f.key] ?? ''}" placeholder="${f.placeholder || ''}" data-key="${f.key}" min="1">
+        </div>`;
+      }
+      return `<div class="config-field">
+        <label>${f.label}</label>
+        <input type="text" value="${escAttr(block.config[f.key] ?? '')}" placeholder="${f.placeholder || ''}" data-key="${f.key}">
+      </div>`;
+    }).join('')}
+  `;
+
+  panel.querySelectorAll('input').forEach(input => {
+    const ev = input.type === 'checkbox' ? 'change' : 'input';
+    input.addEventListener(ev, () => {
+      const key = input.dataset.key;
+      if (input.type === 'checkbox') block.config[key] = input.checked;
+      else if (input.type === 'number') block.config[key] = parseInt(input.value) || 0;
+      else block.config[key] = input.value;
+      renderPipeline();
+      renderCommand();
+      renderPreview();
+    });
+  });
+}
+
+// ===== CONFIG PREVIEW TEXT =====
+function getConfigPreview(block) {
+  const c = block.config;
+  switch (block.type) {
+    case 'grep': return c.pattern ? `"${c.pattern}"${c.ignoreCase?' -i':''}${c.invert?' -v':''}` : '';
+    case 'awk': return c.condition || c.action !== 'print $0' ? `${c.condition} {${c.action}}` : '';
+    case 'cut': return c.fields ? `-f${c.fields}` : '';
+    case 'sort': return c.key ? `-k${c.key}${c.numeric?' -n':''}${c.reverse?' -r':''}` : (c.numeric||c.reverse?`${c.numeric?'-n':''}${c.reverse?' -r':''}`.trim():'');
+    case 'uniq': return c.count ? '-c' : '';
+    case 'head': case 'tail': return c.lines ? `-n ${c.lines}` : '';
+    case 'sed': return c.pattern ? `s/${c.pattern}/${c.replacement}/` : '';
+    case 'tr': return c.from ? `'${c.from}' '${c.to}'` : '';
+    case 'tee': return c.filename || '';
+    case 'wc': return [c.lines&&'-l',c.words&&'-w',c.chars&&'-c'].filter(Boolean).join(' ') || '-l';
+    default: return '';
+  }
+}
+
+// ===== COMMAND GENERATION =====
+function generateCommand() {
+  if (state.pipeline.length === 0) return '';
+  const parts = [];
+  state.pipeline.forEach((block, i) => {
+    const c = block.config;
+    let cmd = '';
+    switch (block.type) {
+      case 'grep': {
+        let flags = [];
+        if (c.ignoreCase) flags.push('-i');
+        if (c.invert) flags.push('-v');
+        const f = flags.length ? flags.join(' ') + ' ' : '';
+        const pat = c.pattern || 'pattern';
+        cmd = i === 0 ? `grep ${f}"${pat}" sample_sales.csv` : `grep ${f}"${pat}"`;
+        break;
+      }
+      case 'awk': {
+        const delim = c.delimiter ? `-F${c.delimiter} ` : '';
+        const cond = c.condition || '';
+        const act = c.action || 'print $0';
+        const body = cond ? `${cond} {${act}}` : `{${act}}`;
+        cmd = i === 0 ? `awk ${delim}'${body}' sample_sales.csv` : `awk ${delim}'${body}'`;
+        break;
+      }
+      case 'cut': {
+        const d = c.delimiter ? `-d${c.delimiter} ` : '';
+        const f = c.fields ? `-f${c.fields}` : '-f1';
+        cmd = i === 0 ? `cut ${d}${f} sample_sales.csv` : `cut ${d}${f}`;
+        break;
+      }
+      case 'sort': {
+        let flags = [];
+        if (c.delimiter) flags.push(`-t${c.delimiter}`);
+        if (c.key) flags.push(`-k${c.key}`);
+        if (c.numeric) flags.push('-n');
+        if (c.reverse) flags.push('-r');
+        const f = flags.length ? flags.join(' ') + ' ' : '';
+        cmd = i === 0 ? `sort ${f}sample_sales.csv` : `sort ${f}`.trim();
+        break;
+      }
+      case 'uniq': {
+        let flags = [];
+        if (c.count) flags.push('-c');
+        if (c.duplicatesOnly) flags.push('-d');
+        const f = flags.length ? flags.join(' ') + ' ' : '';
+        cmd = i === 0 ? `uniq ${f}sample_sales.csv` : `uniq ${f}`.trim();
+        break;
+      }
+      case 'head': cmd = i === 0 ? `head -n ${c.lines||5} sample_sales.csv` : `head -n ${c.lines||5}`; break;
+      case 'tail': cmd = i === 0 ? `tail -n ${c.lines||5} sample_sales.csv` : `tail -n ${c.lines||5}`; break;
+      case 'sed': {
+        const g = c.global ? 'g' : '';
+        const pat = c.pattern || 'pattern';
+        const rep = c.replacement || '';
+        cmd = i === 0 ? `sed 's/${pat}/${rep}/${g}' sample_sales.csv` : `sed 's/${pat}/${rep}/${g}'`;
+        break;
+      }
+      case 'tr': {
+        let flags = [];
+        if (c.delete) flags.push('-d');
+        if (c.squeeze) flags.push('-s');
+        const f = flags.length ? flags.join(' ') + ' ' : '';
+        // tr can't take a file arg, needs cat
+        const from = c.from || 'a-z';
+        const to = c.delete ? '' : (c.to || 'A-Z');
+        if (c.delete) cmd = i === 0 ? `cat sample_sales.csv | tr ${f}'${from}'` : `tr ${f}'${from}'`;
+        else cmd = i === 0 ? `cat sample_sales.csv | tr ${f}'${from}' '${to}'` : `tr ${f}'${from}' '${to}'`;
+        break;
+      }
+      case 'tee': cmd = `tee ${c.filename || 'output.csv'}`; break;
+      case 'wc': {
+        let flags = [];
+        if (c.lines) flags.push('-l');
+        if (c.words) flags.push('-w');
+        if (c.chars) flags.push('-c');
+        if (!flags.length) flags.push('-l');
+        cmd = i === 0 ? `wc ${flags.join(' ')} sample_sales.csv` : `wc ${flags.join(' ')}`;
+        break;
+      }
+    }
+    parts.push(cmd);
+  });
+  return parts.join(' | ');
+}
+
+function renderCommand() {
+  document.getElementById('command-output').textContent = generateCommand();
+}
+
+// ===== DATA SIMULATION =====
+function simulateUpTo(index) {
+  let lines = SAMPLE_DATA.split('\n');
+  for (let i = 0; i <= index && i < state.pipeline.length; i++) {
+    lines = simulateStep(lines, state.pipeline[i]);
+  }
+  return lines;
+}
+
+function simulateStep(lines, block) {
+  const c = block.config;
+  try {
+    switch (block.type) {
+      case 'grep': {
+        if (!c.pattern) return lines;
+        const re = new RegExp(c.pattern, c.ignoreCase ? 'i' : '');
+        return lines.filter(l => c.invert ? !re.test(l) : re.test(l));
+      }
+      case 'awk': {
+        if (!c.condition && c.action === 'print $0') return lines;
+        const delim = c.delimiter || ',';
+        return lines.filter(line => {
+          if (!c.condition) return true;
+          const fields = line.split(delim);
+          return evalAwkCondition(c.condition, fields);
+        }).map(line => {
+          const fields = line.split(delim);
+          if (c.action && c.action !== 'print $0') {
+            return evalAwkAction(c.action, fields, delim);
+          }
+          return line;
+        });
+      }
+      case 'cut': {
+        if (!c.fields) return lines;
+        const delim = c.delimiter || ',';
+        const fieldList = parseFields(c.fields);
+        return lines.map(line => {
+          const parts = line.split(delim);
+          return fieldList.map(f => parts[f - 1] || '').join(delim);
+        });
+      }
+      case 'sort': {
+        const sorted = [...lines];
+        const ki = c.key ? parseInt(c.key) - 1 : 0;
+        const delim = c.delimiter || ',';
+        sorted.sort((a, b) => {
+          const va = a.split(delim)[ki] || '';
+          const vb = b.split(delim)[ki] || '';
+          if (c.numeric) return (parseFloat(va) || 0) - (parseFloat(vb) || 0);
+          return va.localeCompare(vb);
+        });
+        if (c.reverse) sorted.reverse();
+        return sorted;
+      }
+      case 'uniq': {
+        const result = [];
+        let prev = null, count = 0;
+        for (const line of lines) {
+          if (line === prev) { count++; }
+          else {
+            if (prev !== null) {
+              if (!c.duplicatesOnly || count > 1) result.push(c.count ? `${String(count).padStart(7)} ${prev}` : prev);
+            }
+            prev = line; count = 1;
+          }
+        }
+        if (prev !== null) {
+          if (!c.duplicatesOnly || count > 1) result.push(c.count ? `${String(count).padStart(7)} ${prev}` : prev);
+        }
+        return result;
+      }
+      case 'head': return lines.slice(0, c.lines || 5);
+      case 'tail': return lines.slice(-(c.lines || 5));
+      case 'sed': {
+        if (!c.pattern) return lines;
+        const re = new RegExp(c.pattern, c.global ? 'g' : '');
+        return lines.map(l => l.replace(re, c.replacement || ''));
+      }
+      case 'tr': {
+        if (!c.from) return lines;
+        return lines.map(l => {
+          let result = l;
+          if (c.delete) {
+            const chars = expandRange(c.from);
+            result = [...result].filter(ch => !chars.includes(ch)).join('');
+          } else if (c.to) {
+            const from = expandRange(c.from);
+            const to = expandRange(c.to);
+            result = [...result].map(ch => {
+              const idx = from.indexOf(ch);
+              return idx >= 0 ? (to[Math.min(idx, to.length - 1)] || ch) : ch;
+            }).join('');
+          }
+          if (c.squeeze) {
+            result = result.replace(/(.)\1+/g, '$1');
+          }
+          return result;
+        });
+      }
+      case 'tee': return lines;
+      case 'wc': {
+        const parts = [];
+        if (c.lines || (!c.words && !c.chars)) parts.push(String(lines.length));
+        if (c.words) parts.push(String(lines.join(' ').split(/\s+/).filter(Boolean).length));
+        if (c.chars) parts.push(String(lines.join('\n').length));
+        return [parts.join('\t')];
+      }
+    }
+  } catch (e) {
+    return lines;
+  }
+  return lines;
+}
+
+function evalAwkCondition(cond, fields) {
+  const m = cond.match(/\$(\d+)\s*(==|!=|>|<|>=|<=)\s*"?([^"]*)"?/);
+  if (!m) return true;
+  const val = fields[parseInt(m[1]) - 1] || '';
+  const op = m[2];
+  const cmp = m[3];
+  switch (op) {
+    case '==': return val === cmp;
+    case '!=': return val !== cmp;
+    case '>': return parseFloat(val) > parseFloat(cmp);
+    case '<': return parseFloat(val) < parseFloat(cmp);
+    case '>=': return parseFloat(val) >= parseFloat(cmp);
+    case '<=': return parseFloat(val) <= parseFloat(cmp);
+  }
+  return true;
+}
+
+function evalAwkAction(action, fields, delim) {
+  const m = action.match(/print\s+(.*)/);
+  if (!m) return fields.join(delim);
+  const expr = m[1];
+  const parts = expr.split(/,\s*/);
+  return parts.map(p => {
+    p = p.trim();
+    const fm = p.match(/^\$(\d+)$/);
+    if (fm) return fields[parseInt(fm[1]) - 1] || '';
+    const sm = p.match(/^"(.*)"$/);
+    if (sm) return sm[1];
+    return p;
+  }).join(delim === ',' ? ',' : ' ');
+}
+
+function parseFields(fieldStr) {
+  const result = [];
+  fieldStr.split(',').forEach(part => {
+    part = part.trim();
+    const range = part.match(/^(\d+)-(\d+)$/);
+    if (range) {
+      for (let i = parseInt(range[1]); i <= parseInt(range[2]); i++) result.push(i);
+    } else {
+      const n = parseInt(part);
+      if (!isNaN(n)) result.push(n);
+    }
+  });
+  return result;
+}
+
+function expandRange(str) {
+  const m = str.match(/^(.)-(.)/);
+  if (m) {
+    const start = m[1].charCodeAt(0);
+    const end = m[2].charCodeAt(0);
+    const chars = [];
+    for (let i = start; i <= end; i++) chars.push(String.fromCharCode(i));
+    return chars;
+  }
+  return [...str];
+}
+
+// ===== RENDER PREVIEW =====
+function renderPreview() {
+  const content = document.getElementById('preview-content');
+  const stageEl = document.getElementById('preview-stage');
+  const countEl = document.getElementById('row-count');
+
+  let lines, label;
+
+  if (state.selectedId !== null) {
+    const idx = state.pipeline.findIndex(b => b.id === state.selectedId);
+    if (idx >= 0) {
+      const block = state.pipeline[idx];
+      lines = simulateUpTo(idx);
+      label = `After ${COMMANDS[block.type].label}`;
+    }
+  }
+
+  if (!lines) {
+    lines = SAMPLE_DATA.split('\n');
+    label = 'Input Data';
+  }
+
+  stageEl.textContent = label;
+  countEl.textContent = `${lines.length} row${lines.length !== 1 ? 's' : ''}`;
+
+  // Try to render as table if CSV-like
+  const delim = lines.length > 0 && lines[0].includes(',') ? ',' : null;
+  if (delim && lines.length > 0) {
+    const allFields = lines.map(l => l.split(delim));
+    const maxCols = Math.max(...allFields.map(f => f.length));
+    // Check if first row looks like a header
+    const sourceLines = SAMPLE_DATA.split('\n');
+    const header = sourceLines[0].split(delim);
+    const hasOrigHeader = lines[0] === sourceLines[0];
+
+    let html = '<table><thead><tr>';
+    if (hasOrigHeader) {
+      header.forEach(h => { html += `<th>${escHtml(h)}</th>`; });
+      html += '</tr></thead><tbody>';
+      allFields.slice(1).forEach(row => {
+        html += '<tr>';
+        for (let i = 0; i < maxCols; i++) html += `<td>${escHtml(row[i] || '')}</td>`;
+        html += '</tr>';
+      });
+    } else {
+      for (let i = 0; i < maxCols; i++) html += `<th>col ${i + 1}</th>`;
+      html += '</tr></thead><tbody>';
+      allFields.forEach(row => {
+        html += '<tr>';
+        for (let i = 0; i < maxCols; i++) html += `<td>${escHtml(row[i] || '')}</td>`;
+        html += '</tr>';
+      });
+    }
+    html += '</tbody></table>';
+    content.innerHTML = html;
+  } else {
+    content.innerHTML = `<div class="preview-raw">${lines.map((l, i) =>
+      `<span class="line-num">${i + 1}</span>${escHtml(l)}`
+    ).join('\n')}</div>`;
+  }
+}
+
+// ===== ACTIONS =====
+function addBlock(type) {
+  const cmd = COMMANDS[type];
+  state.pipeline.push({
+    id: state.nextId++,
+    type,
+    config: { ...cmd.defaults },
+  });
+  selectBlock(state.pipeline[state.pipeline.length - 1].id);
+}
+
+function removeBlock(id) {
+  state.pipeline = state.pipeline.filter(b => b.id !== id);
+  if (state.selectedId === id) state.selectedId = null;
+  renderAll();
+}
+
+function selectBlock(id) {
+  state.selectedId = state.selectedId === id ? null : id;
+  renderAll();
+}
+
+function clearPipeline() {
+  state.pipeline = [];
+  state.selectedId = null;
+  renderAll();
+}
+
+function renderAll() {
+  renderPipeline();
+  renderConfig();
+  renderCommand();
+  renderPreview();
+}
+
+function copyCommand() {
+  const cmd = generateCommand();
+  if (!cmd) return;
+  navigator.clipboard.writeText(cmd).then(() => {
+    const btn = document.getElementById('copy-btn');
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+  });
+}
+
+// ===== UTILS =====
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escAttr(s) { return String(s).replace(/"/g,'&quot;').replace(/&/g,'&amp;'); }
+
+// ===== INIT =====
+renderSidebar();
+setupCanvasDrop();
+renderAll();
+</script>
+</body>
+</html>
