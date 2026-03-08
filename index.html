@@ -206,6 +206,9 @@ body::after{
 }
 .config-field input:focus,.config-field select:focus{border-color:var(--cyan)}
 .config-field input::placeholder{color:var(--text-dim)}
+.config-help{
+  margin-top:5px;font-size:10px;line-height:1.4;color:var(--text-dim);
+}
 .config-row{display:flex;gap:8px}
 .config-row .config-field{flex:1}
 .config-check{
@@ -392,8 +395,21 @@ const COMMANDS = {
   },
   awk: {
     label:'awk', excel:'Column filter + math', group:'filter',
-    icon:'Ak', defaults:{condition:'',action:'print $0',delimiter:','},
+    icon:'Ak', defaults:{conditionPreset:'',condition:'',action:'print $0',delimiter:','},
     config:[
+      {
+        key:'conditionPreset',type:'select',label:'Common conditions',
+        hint:'Sample CSV columns: $1=date, $2=product, $3=region, $4=amount',
+        options:[
+          {value:'',label:'Custom condition'},
+          {value:'$3 == "North"',label:'Region is North'},
+          {value:'$3 != "North"',label:'Region is not North'},
+          {value:'$4 >= 200',label:'Amount is at least 200'},
+          {value:'$4 < 200',label:'Amount is below 200'},
+          {value:'$2 == "Widget"',label:'Product is Widget'},
+          {value:'$4 != ""',label:'Amount is not empty'},
+        ],
+      },
       {key:'condition',type:'text',label:'Condition',placeholder:"e.g. $3 == \"North\""},
       {key:'action',type:'text',label:'Action',placeholder:'e.g. print $2, $4'},
       {key:'delimiter',type:'text',label:'Delimiter (-F)',placeholder:','},
@@ -629,6 +645,7 @@ function renderConfig() {
 
   section.classList.remove('no-selection');
   const cmd = COMMANDS[block.type];
+  if (block.type === 'awk') syncAwkConditionPreset(block);
 
   panel.innerHTML = `
     <div class="config-title">Configure <span class="cmd-label">${cmd.label}</span></div>
@@ -643,22 +660,47 @@ function renderConfig() {
         return `<div class="config-field">
           <label>${f.label}</label>
           <input type="number" value="${block.config[f.key] ?? ''}" placeholder="${escAttr(f.placeholder || '')}" data-key="${f.key}" min="1">
+          ${f.hint ? `<div class="config-help">${escHtml(f.hint)}</div>` : ''}
+        </div>`;
+      }
+      if (f.type === 'select') {
+        return `<div class="config-field">
+          <label>${f.label}</label>
+          <select data-key="${f.key}">
+            ${(f.options || []).map(opt => `
+              <option value="${escAttr(opt.value)}" ${String(block.config[f.key] ?? '') === String(opt.value) ? 'selected' : ''}>${escHtml(opt.label)}</option>
+            `).join('')}
+          </select>
+          ${f.hint ? `<div class="config-help">${escHtml(f.hint)}</div>` : ''}
         </div>`;
       }
       return `<div class="config-field">
         <label>${f.label}</label>
         <input type="text" value="${escAttr(block.config[f.key] ?? '')}" placeholder="${escAttr(f.placeholder || '')}" data-key="${f.key}">
+        ${f.hint ? `<div class="config-help">${escHtml(f.hint)}</div>` : ''}
       </div>`;
     }).join('')}
   `;
 
-  panel.querySelectorAll('input').forEach(input => {
-    const ev = input.type === 'checkbox' ? 'change' : 'input';
+  panel.querySelectorAll('input, select').forEach(input => {
+    const ev = input.tagName === 'SELECT' || input.type === 'checkbox' ? 'change' : 'input';
     input.addEventListener(ev, () => {
       const key = input.dataset.key;
-      if (input.type === 'checkbox') block.config[key] = input.checked;
+      if (input.tagName === 'SELECT') {
+        block.config[key] = input.value;
+        if (block.type === 'awk' && key === 'conditionPreset' && input.value) {
+          block.config.condition = input.value;
+          const conditionInput = panel.querySelector('input[data-key="condition"]');
+          if (conditionInput) conditionInput.value = input.value;
+        }
+      } else if (input.type === 'checkbox') block.config[key] = input.checked;
       else if (input.type === 'number') block.config[key] = parseInt(input.value) || 0;
       else block.config[key] = input.value;
+      if (block.type === 'awk' && key === 'condition') {
+        syncAwkConditionPreset(block);
+        const presetSelect = panel.querySelector('select[data-key="conditionPreset"]');
+        if (presetSelect) presetSelect.value = block.config.conditionPreset || '';
+      }
       renderPipeline();
       renderCommand();
       renderPreview();
@@ -682,6 +724,13 @@ function getConfigPreview(block) {
     case 'wc': return [c.lines&&'-l',c.words&&'-w',c.chars&&'-c'].filter(Boolean).join(' ') || '-l';
     default: return '';
   }
+}
+
+function syncAwkConditionPreset(block) {
+  if (block.type !== 'awk') return;
+  const presetField = COMMANDS.awk.config.find(field => field.key === 'conditionPreset');
+  const match = (presetField?.options || []).find(option => option.value && option.value === (block.config.condition || ''));
+  block.config.conditionPreset = match ? match.value : '';
 }
 
 function shellQuote(value) {
