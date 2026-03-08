@@ -294,6 +294,7 @@ body::after{
 }
 #copy-btn:hover{filter:brightness(1.15);transform:scale(1.03)}
 #copy-btn.copied{background:var(--amber)}
+#copy-btn.failed{background:var(--rose);color:var(--text)}
 
 /* === SCROLLBAR === */
 ::-webkit-scrollbar{width:6px;height:6px}
@@ -304,6 +305,37 @@ body::after{
 /* === ANIMATIONS === */
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .pipe-block{animation:fadeIn .2s ease}
+
+@media (max-width: 960px){
+  html,body{overflow:auto}
+  #app{
+    grid-template-columns:1fr;
+    grid-template-rows:auto auto 1fr auto;
+    height:auto;min-height:100vh;
+  }
+  #sidebar{
+    grid-row:auto;
+    border-right:none;border-bottom:1px solid var(--border);
+  }
+  #pipeline-area{padding:14px 16px}
+  #bottom-section,
+  #bottom-section.no-selection{grid-template-columns:1fr}
+  #config-panel{
+    border-right:none;border-bottom:1px solid var(--border);
+    max-height:42vh;
+  }
+  #bottom-section.no-selection #config-panel{display:none}
+  #data-preview{min-height:320px}
+  #command-bar{
+    flex-wrap:wrap;row-gap:10px;
+    padding:12px 14px;
+  }
+  #command-output{
+    order:3;width:100%;
+    white-space:pre-wrap;word-break:break-word;
+  }
+  #copy-btn{margin-left:auto}
+}
 </style>
 </head>
 <body>
@@ -469,6 +501,7 @@ let state = {
   selectedId: null,
   nextId: 1,
 };
+let copyBtnResetTimer = null;
 
 // ===== RENDER SIDEBAR =====
 function renderSidebar() {
@@ -557,6 +590,7 @@ function renderDropZone(canvas) {
   zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
   zone.addEventListener('drop', e => {
     e.preventDefault();
+    e.stopPropagation();
     zone.classList.remove('drag-over');
     const cmd = e.dataTransfer.getData('text/plain');
     if (COMMANDS[cmd]) addBlock(cmd);
@@ -574,7 +608,10 @@ function setupCanvasDrop() {
     if (!canvas.contains(e.relatedTarget)) canvas.classList.remove('drag-over');
   });
   canvas.addEventListener('drop', e => {
+    e.preventDefault();
     canvas.classList.remove('drag-over');
+    const cmd = e.dataTransfer.getData('text/plain');
+    if (COMMANDS[cmd]) addBlock(cmd);
   });
 }
 
@@ -605,12 +642,12 @@ function renderConfig() {
       if (f.type === 'number') {
         return `<div class="config-field">
           <label>${f.label}</label>
-          <input type="number" value="${block.config[f.key] ?? ''}" placeholder="${f.placeholder || ''}" data-key="${f.key}" min="1">
+          <input type="number" value="${block.config[f.key] ?? ''}" placeholder="${escAttr(f.placeholder || '')}" data-key="${f.key}" min="1">
         </div>`;
       }
       return `<div class="config-field">
         <label>${f.label}</label>
-        <input type="text" value="${escAttr(block.config[f.key] ?? '')}" placeholder="${f.placeholder || ''}" data-key="${f.key}">
+        <input type="text" value="${escAttr(block.config[f.key] ?? '')}" placeholder="${escAttr(f.placeholder || '')}" data-key="${f.key}">
       </div>`;
     }).join('')}
   `;
@@ -647,11 +684,25 @@ function getConfigPreview(block) {
   }
 }
 
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+function buildSedExpression(pattern, replacement, global) {
+  const delimiters = ['/', '|', '#', '~', '%', '@', ':'];
+  const delim = delimiters.find(ch => !pattern.includes(ch) && !replacement.includes(ch)) || '/';
+  const safePattern = pattern.replaceAll(delim, `\\${delim}`);
+  const safeReplacement = replacement.replaceAll('&', '\\&').replaceAll(delim, `\\${delim}`);
+  return `s${delim}${safePattern}${delim}${safeReplacement}${delim}${global ? 'g' : ''}`;
+}
+
 // ===== COMMAND GENERATION =====
 function generateCommand() {
   if (state.pipeline.length === 0) return '';
+  const file = 'sample_sales.csv';
   const parts = [];
   state.pipeline.forEach((block, i) => {
+    const isFirst = i === 0;
     const c = block.config;
     let cmd = '';
     switch (block.type) {
@@ -659,72 +710,75 @@ function generateCommand() {
         let flags = [];
         if (c.ignoreCase) flags.push('-i');
         if (c.invert) flags.push('-v');
-        const f = flags.length ? flags.join(' ') + ' ' : '';
         const pat = c.pattern || 'pattern';
-        cmd = i === 0 ? `grep ${f}"${pat}" sample_sales.csv` : `grep ${f}"${pat}"`;
+        cmd = ['grep', ...flags, shellQuote(pat), isFirst ? file : ''].filter(Boolean).join(' ');
         break;
       }
       case 'awk': {
-        const delim = c.delimiter ? `-F${c.delimiter} ` : '';
         const cond = c.condition || '';
         const act = c.action || 'print $0';
         const body = cond ? `${cond} {${act}}` : `{${act}}`;
-        cmd = i === 0 ? `awk ${delim}'${body}' sample_sales.csv` : `awk ${delim}'${body}'`;
+        cmd = [
+          'awk',
+          c.delimiter ? `-F${shellQuote(c.delimiter)}` : '',
+          shellQuote(body),
+          isFirst ? file : '',
+        ].filter(Boolean).join(' ');
         break;
       }
       case 'cut': {
-        const d = c.delimiter ? `-d${c.delimiter} ` : '';
         const f = c.fields ? `-f${c.fields}` : '-f1';
-        cmd = i === 0 ? `cut ${d}${f} sample_sales.csv` : `cut ${d}${f}`;
+        cmd = ['cut', c.delimiter ? `-d${shellQuote(c.delimiter)}` : '', f, isFirst ? file : ''].filter(Boolean).join(' ');
         break;
       }
       case 'sort': {
         let flags = [];
-        if (c.delimiter) flags.push(`-t${c.delimiter}`);
+        if (c.delimiter) flags.push(`-t${shellQuote(c.delimiter)}`);
         if (c.key) flags.push(`-k${c.key}`);
         if (c.numeric) flags.push('-n');
         if (c.reverse) flags.push('-r');
-        const f = flags.length ? flags.join(' ') + ' ' : '';
-        cmd = i === 0 ? `sort ${f}sample_sales.csv` : `sort ${f}`.trim();
+        cmd = ['sort', ...flags, isFirst ? file : ''].filter(Boolean).join(' ');
         break;
       }
       case 'uniq': {
         let flags = [];
         if (c.count) flags.push('-c');
         if (c.duplicatesOnly) flags.push('-d');
-        const f = flags.length ? flags.join(' ') + ' ' : '';
-        cmd = i === 0 ? `uniq ${f}sample_sales.csv` : `uniq ${f}`.trim();
+        cmd = ['uniq', ...flags, isFirst ? file : ''].filter(Boolean).join(' ');
         break;
       }
-      case 'head': cmd = i === 0 ? `head -n ${c.lines||5} sample_sales.csv` : `head -n ${c.lines||5}`; break;
-      case 'tail': cmd = i === 0 ? `tail -n ${c.lines||5} sample_sales.csv` : `tail -n ${c.lines||5}`; break;
+      case 'head': cmd = ['head', '-n', String(c.lines || 5), isFirst ? file : ''].filter(Boolean).join(' '); break;
+      case 'tail': cmd = ['tail', '-n', String(c.lines || 5), isFirst ? file : ''].filter(Boolean).join(' '); break;
       case 'sed': {
-        const g = c.global ? 'g' : '';
         const pat = c.pattern || 'pattern';
         const rep = c.replacement || '';
-        cmd = i === 0 ? `sed 's/${pat}/${rep}/${g}' sample_sales.csv` : `sed 's/${pat}/${rep}/${g}'`;
+        cmd = ['sed', shellQuote(buildSedExpression(pat, rep, c.global)), isFirst ? file : ''].filter(Boolean).join(' ');
         break;
       }
       case 'tr': {
         let flags = [];
         if (c.delete) flags.push('-d');
         if (c.squeeze) flags.push('-s');
-        const f = flags.length ? flags.join(' ') + ' ' : '';
-        // tr can't take a file arg, needs cat
         const from = c.from || 'a-z';
         const to = c.delete ? '' : (c.to || 'A-Z');
-        if (c.delete) cmd = i === 0 ? `cat sample_sales.csv | tr ${f}'${from}'` : `tr ${f}'${from}'`;
-        else cmd = i === 0 ? `cat sample_sales.csv | tr ${f}'${from}' '${to}'` : `tr ${f}'${from}' '${to}'`;
+        const trArgs = ['tr', ...flags, shellQuote(from)];
+        if (!c.delete) trArgs.push(shellQuote(to));
+        cmd = trArgs.join(' ');
+        if (isFirst) cmd = `cat ${file} | ${cmd}`;
         break;
       }
-      case 'tee': cmd = `tee ${c.filename || 'output.csv'}`; break;
+      case 'tee': {
+        cmd = `tee ${shellQuote(c.filename || 'output.csv')}`;
+        if (isFirst) cmd = `cat ${file} | ${cmd}`;
+        break;
+      }
       case 'wc': {
         let flags = [];
         if (c.lines) flags.push('-l');
         if (c.words) flags.push('-w');
         if (c.chars) flags.push('-c');
         if (!flags.length) flags.push('-l');
-        cmd = i === 0 ? `wc ${flags.join(' ')} sample_sales.csv` : `wc ${flags.join(' ')}`;
+        cmd = ['wc', ...flags, isFirst ? file : ''].filter(Boolean).join(' ');
         break;
       }
     }
@@ -853,20 +907,31 @@ function simulateStep(lines, block) {
 }
 
 function evalAwkCondition(cond, fields) {
-  const m = cond.match(/\$(\d+)\s*(==|!=|>|<|>=|<=)\s*"?([^"]*)"?/);
+  const m = cond.match(/\$(\d+)\s*(==|!=|>=|<=|>|<)\s*"?([^"]*)"?\s*$/);
   if (!m) return true;
   const val = fields[parseInt(m[1]) - 1] || '';
   const op = m[2];
   const cmp = m[3];
+  return compareAwkValues(val, cmp, op);
+}
+
+function compareAwkValues(left, right, op) {
+  const useNumeric = isAwkNumeric(left) && isAwkNumeric(right);
+  const a = useNumeric ? Number(left) : String(left);
+  const b = useNumeric ? Number(right) : String(right);
   switch (op) {
-    case '==': return val === cmp;
-    case '!=': return val !== cmp;
-    case '>': return parseFloat(val) > parseFloat(cmp);
-    case '<': return parseFloat(val) < parseFloat(cmp);
-    case '>=': return parseFloat(val) >= parseFloat(cmp);
-    case '<=': return parseFloat(val) <= parseFloat(cmp);
+    case '==': return a === b;
+    case '!=': return a !== b;
+    case '>': return a > b;
+    case '<': return a < b;
+    case '>=': return a >= b;
+    case '<=': return a <= b;
+    default: return true;
   }
-  return true;
+}
+
+function isAwkNumeric(value) {
+  return /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(String(value).trim());
 }
 
 function evalAwkAction(action, fields, delim) {
@@ -881,7 +946,7 @@ function evalAwkAction(action, fields, delim) {
     const sm = p.match(/^"(.*)"$/);
     if (sm) return sm[1];
     return p;
-  }).join(delim === ',' ? ',' : ' ');
+  }).join(' ');
 }
 
 function parseFields(fieldStr) {
@@ -1008,20 +1073,59 @@ function renderAll() {
   renderPreview();
 }
 
-function copyCommand() {
+function setCopyButtonState(label, stateClass = '', resetMs = 1500) {
+  const btn = document.getElementById('copy-btn');
+  btn.textContent = label;
+  btn.classList.toggle('copied', stateClass === 'copied');
+  btn.classList.toggle('failed', stateClass === 'failed');
+  clearTimeout(copyBtnResetTimer);
+  copyBtnResetTimer = setTimeout(() => {
+    btn.textContent = 'Copy';
+    btn.classList.remove('copied', 'failed');
+  }, resetMs);
+}
+
+function fallbackCopyText(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly', '');
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  ta.setSelectionRange(0, ta.value.length);
+  const ok = document.execCommand('copy');
+  document.body.removeChild(ta);
+  if (!ok) throw new Error('copy failed');
+}
+
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  fallbackCopyText(text);
+}
+
+async function copyCommand() {
   const cmd = generateCommand();
   if (!cmd) return;
-  navigator.clipboard.writeText(cmd).then(() => {
-    const btn = document.getElementById('copy-btn');
-    btn.textContent = 'Copied!';
-    btn.classList.add('copied');
-    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
-  });
+  try {
+    await copyTextToClipboard(cmd);
+    setCopyButtonState('Copied!', 'copied');
+  } catch (error) {
+    try {
+      fallbackCopyText(cmd);
+      setCopyButtonState('Copied!', 'copied');
+    } catch (fallbackError) {
+      setCopyButtonState('Copy failed', 'failed', 1800);
+    }
+  }
 }
 
 // ===== UTILS =====
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function escAttr(s) { return String(s).replace(/"/g,'&quot;').replace(/&/g,'&amp;'); }
+function escAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
 
 // ===== INIT =====
 renderSidebar();
