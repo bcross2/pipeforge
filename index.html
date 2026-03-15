@@ -4,210 +4,297 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PipeForge — Visual Linux Pipeline Builder</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg-deep:#060a12;--bg-primary:#0a1019;--bg-secondary:#0f1726;
-  --bg-card:#141e30;--bg-card-hover:#1a2840;--bg-surface:#1c2a42;
-  --border:#1e2d47;--border-light:#2a3f5f;--border-active:#3b5998;
-  --cyan:#06d6a0;--cyan-dim:#06d6a050;--cyan-glow:rgba(6,214,160,.25);
-  --amber:#f4a261;--amber-dim:#f4a26150;--amber-glow:rgba(244,162,97,.2);
-  --rose:#ef476f;--rose-dim:#ef476f50;
-  --text:#e0e7ef;--text-muted:#8899aa;--text-dim:#556677;
-  --font-display:'Rajdhani',sans-serif;--font-mono:'Fira Code',monospace;
+  --black:#000000;--charcoal:#161616;--charcoal-light:#1e1e1e;
+  --surface:#242424;--surface-light:#2e2e2e;
+  --border:#333;--border-light:#444;--border-active:#e2ded8;
+  --bone:#e2ded8;--bone-muted:#9a9590;--bone-dim:#5c5955;
+  --font-display:'Aptos','Segoe UI','Helvetica Neue',sans-serif;--font-mono:'Aptos','Segoe UI','Helvetica Neue',sans-serif;
 }
 html,body{height:100%;overflow:hidden}
 body{
-  font-family:var(--font-mono);color:var(--text);
-  background:var(--bg-deep);display:flex;flex-direction:column;
+  font-family:var(--font-mono);color:var(--bone);
+  background:var(--black);display:flex;flex-direction:column;
 }
-/* === SCANLINE OVERLAY === */
-body::after{
-  content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
-  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.03) 2px,rgba(0,0,0,.03) 4px);
-}
+
 /* === LAYOUT === */
-#app{display:grid;grid-template-columns:220px 1fr;grid-template-rows:1fr auto;height:100vh;overflow:hidden}
-/* === SIDEBAR === */
-#sidebar{
-  grid-row:1/-1;background:var(--bg-primary);border-right:1px solid var(--border);
-  display:flex;flex-direction:column;overflow-y:auto;
+#app{
+  display:flex;flex-direction:column;height:100vh;overflow:hidden;
+  background:var(--black);
 }
-.sidebar-brand{
-  padding:20px 16px 8px;border-bottom:1px solid var(--border);
-  text-align:center;
+#topbar{
+  display:flex;align-items:center;justify-content:space-between;gap:18px;
+  padding:14px 20px;border-bottom:1px solid var(--border);
+  background:var(--charcoal);
 }
-.sidebar-brand h1{
-  font-family:var(--font-display);font-size:28px;font-weight:700;
-  letter-spacing:6px;color:var(--cyan);
-  text-shadow:0 0 20px var(--cyan-glow),0 0 40px var(--cyan-glow);
+.brand-shell{display:flex;align-items:center;gap:14px;min-width:0}
+.brand-mark{
+  width:44px;height:44px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--border-light);color:var(--bone);
+  font-family:var(--font-display);font-size:18px;font-weight:700;letter-spacing:2px;
+  background:var(--surface);
 }
-.sidebar-brand p{
-  font-size:10px;color:var(--text-dim);letter-spacing:3px;
-  text-transform:uppercase;margin-top:2px;
+.brand-copy h1{
+  font-family:var(--font-display);font-size:24px;font-weight:700;
+  letter-spacing:5px;color:var(--bone);
 }
-.cmd-group{padding:12px 12px 4px}
+.brand-copy p{
+  margin-top:2px;font-size:10px;color:var(--bone-dim);
+  letter-spacing:3px;text-transform:uppercase;
+}
+.topbar-meta{display:flex;align-items:center;gap:12px;min-width:0;flex:1;justify-content:center}
+.meta-chip{
+  min-width:0;padding:8px 12px;border-radius:6px;
+  border:1px solid var(--border);background:var(--surface);
+}
+.meta-chip span{
+  display:block;font-size:9px;color:var(--bone-dim);
+  letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;
+}
+.meta-chip strong{
+  display:block;font-size:12px;color:var(--bone);
+  font-family:var(--font-display);letter-spacing:1px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.topbar-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.dock-toggle,.dock-close,#clear-btn{
+  font-family:var(--font-display);font-size:11px;font-weight:600;
+  letter-spacing:2px;text-transform:uppercase;padding:6px 12px;border-radius:4px;
+  border:1px solid var(--border);background:var(--surface);color:var(--bone-muted);
+  cursor:pointer;transition:all .15s ease;
+}
+.dock-toggle:hover,.dock-close:hover,#clear-btn:hover{border-color:var(--border-light);color:var(--bone)}
+.dock-toggle.active{
+  border-color:var(--bone);color:var(--bone);
+}
+#clear-btn:hover{border-color:var(--bone);color:var(--bone)}
+#workspace{
+  --left-dock:0px;--right-dock:0px;--bottom-dock:0px;
+  flex:1;display:grid;grid-template-columns:var(--left-dock) minmax(0,1fr) var(--right-dock);
+  grid-template-rows:minmax(0,1fr) var(--bottom-dock);
+  gap:1px;padding:0;min-height:0;overflow:hidden;
+  background:var(--border);
+}
+#workspace.has-library{--left-dock:270px}
+#workspace.has-inspector{--right-dock:320px}
+#workspace.has-preview{--bottom-dock:minmax(220px,32vh)}
+.dock-panel{
+  min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column;
+  border:none;border-radius:0;
+  background:var(--charcoal);
+  opacity:0;pointer-events:none;transition:opacity .15s ease;
+}
+#library-dock{grid-column:1;grid-row:1 / span 2}
+#inspector-dock{grid-column:3;grid-row:1 / span 2}
+#preview-dock{grid-column:2;grid-row:2}
+#workspace.has-library #library-dock,
+#workspace.has-inspector #inspector-dock,
+#workspace.has-preview #preview-dock{
+  opacity:1;pointer-events:auto;
+}
+.dock-header{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:14px 16px 10px;border-bottom:1px solid var(--border);
+}
+.dock-eyebrow{
+  display:block;font-size:9px;color:var(--bone-dim);
+  letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;
+}
+.dock-header h2{
+  font-family:var(--font-display);font-size:16px;font-weight:600;
+  letter-spacing:1px;color:var(--bone);
+}
+.dock-subtitle{
+  padding:0 16px 10px;font-size:11px;line-height:1.5;color:var(--bone-dim);
+  border-bottom:1px solid var(--border);
+}
+#command-palette{flex:1;overflow:auto;padding:10px}
+.cmd-group{padding:0 0 8px}
 .cmd-group-label{
   font-family:var(--font-display);font-size:11px;font-weight:600;
-  color:var(--text-dim);letter-spacing:2px;text-transform:uppercase;
-  margin-bottom:8px;padding-left:4px;
+  color:var(--bone-dim);letter-spacing:2px;text-transform:uppercase;
+  margin-bottom:6px;padding-left:4px;
 }
 .cmd-card{
   display:flex;align-items:center;gap:10px;
-  padding:8px 10px;margin-bottom:6px;border-radius:6px;
-  background:var(--bg-card);border:1px solid var(--border);
-  cursor:grab;transition:all .15s ease;user-select:none;
+  padding:8px 10px;margin-bottom:4px;border-radius:4px;
+  background:var(--surface);
+  border:1px solid transparent;
+  cursor:grab;transition:all .12s ease;user-select:none;
 }
-.cmd-card:hover{background:var(--bg-card-hover);border-color:var(--border-light);transform:translateX(3px)}
+.cmd-card:hover{
+  border-color:var(--border-light);
+}
 .cmd-card:active{cursor:grabbing;opacity:.7}
 .cmd-card .cmd-icon{
-  width:32px;height:32px;border-radius:5px;display:flex;
-  align-items:center;justify-content:center;font-size:13px;
+  width:32px;height:32px;border-radius:4px;display:flex;
+  align-items:center;justify-content:center;font-size:12px;
   font-weight:600;flex-shrink:0;
-  background:var(--bg-secondary);color:var(--cyan);
-  border:1px solid var(--cyan-dim);
+  background:var(--charcoal-light);color:var(--bone);
+  border:1px solid var(--border);
 }
 .cmd-card .cmd-info{display:flex;flex-direction:column;min-width:0}
-.cmd-card .cmd-name{font-size:12px;font-weight:600;color:var(--text)}
-.cmd-card .cmd-excel{font-size:9px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cmd-card .cmd-name{
+  font-size:13px;font-weight:600;color:var(--bone);
+  font-family:var(--font-display);letter-spacing:1px;
+}
+.cmd-card .cmd-excel{font-size:9px;color:var(--bone-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-/* === MAIN WORKSPACE === */
-#workspace{display:flex;flex-direction:column;overflow:hidden}
-
-/* === PIPELINE AREA === */
-#pipeline-area{
-  flex:0 0 auto;min-height:160px;padding:16px 20px;
-  border-bottom:1px solid var(--border);
+/* === CENTER STAGE === */
+#center-stage{
+  grid-column:2;grid-row:1;min-width:0;min-height:0;
   display:flex;flex-direction:column;
+  background:var(--black);
 }
-.pipeline-header{
-  display:flex;align-items:center;justify-content:space-between;
-  margin-bottom:12px;
+#pipeline-area{
+  position:relative;flex:1;min-height:0;display:flex;flex-direction:column;
+  overflow:hidden;
+  background:var(--black);
 }
-.pipeline-header span{
-  font-family:var(--font-display);font-size:12px;font-weight:600;
-  color:var(--text-dim);letter-spacing:2px;text-transform:uppercase;
+#pipeline-area::before{content:none}
+.stage-header{
+  position:relative;z-index:1;display:flex;align-items:flex-start;justify-content:space-between;
+  gap:16px;padding:20px 24px 0;
 }
-.pipeline-header button{
-  font-family:var(--font-mono);font-size:10px;padding:4px 10px;
-  background:var(--bg-card);border:1px solid var(--border);color:var(--text-muted);
-  border-radius:4px;cursor:pointer;transition:all .15s;
+.stage-copy h2{
+  font-family:var(--font-display);font-size:26px;font-weight:700;
+  letter-spacing:2px;color:var(--bone);
 }
-.pipeline-header button:hover{border-color:var(--rose);color:var(--rose)}
-
+.stage-copy p{
+  margin-top:6px;max-width:660px;font-size:11px;line-height:1.6;color:var(--bone-dim);
+}
+.stage-kicker{
+  display:block;margin-bottom:6px;font-size:10px;color:var(--bone-muted);
+  letter-spacing:3px;text-transform:uppercase;
+}
+.stage-badges{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.stage-badge{
+  padding:6px 10px;border-radius:3px;border:1px solid var(--border);
+  background:var(--charcoal);font-size:10px;color:var(--bone-muted);
+  text-transform:uppercase;letter-spacing:2px;
+}
 #pipeline-canvas{
   flex:1;display:flex;align-items:center;gap:0;
-  padding:10px 12px;border-radius:8px;min-height:90px;
-  background:var(--bg-secondary);border:1px dashed var(--border);
-  overflow-x:auto;overflow-y:hidden;transition:border-color .2s;
+  margin:16px;padding:24px;border-radius:0;min-height:260px;
+  background:var(--charcoal);
+  border:1px solid var(--border);overflow-x:auto;overflow-y:hidden;
+  transition:border-color .15s;position:relative;z-index:1;
 }
-#pipeline-canvas.drag-over{border-color:var(--cyan);background:rgba(6,214,160,.03)}
+#pipeline-canvas.drag-over{
+  border-color:var(--bone);
+}
 #pipeline-canvas.empty::before{
-  content:'Drag commands here to build your pipeline';
-  color:var(--text-dim);font-size:12px;width:100%;text-align:center;
+  content:'Drag tools from the library or double-click to add';
+  color:var(--bone-dim);font-size:12px;line-height:1.7;width:100%;text-align:center;
+  max-width:320px;margin:0 auto;
 }
 
 /* Pipeline blocks */
 .pipe-block{
-  flex-shrink:0;padding:10px 14px;border-radius:8px;
-  background:var(--bg-card);border:1px solid var(--border);
-  cursor:pointer;transition:all .15s;position:relative;min-width:100px;
+  flex-shrink:0;padding:12px 14px;border-radius:4px;
+  background:var(--surface);
+  border:1px solid var(--border);cursor:pointer;
+  transition:all .12s;position:relative;min-width:130px;
 }
-.pipe-block:hover{border-color:var(--border-light);background:var(--bg-card-hover)}
+.pipe-block:hover{
+  border-color:var(--border-light);
+}
 .pipe-block.selected{
-  border-color:var(--cyan);
-  box-shadow:0 0 15px var(--cyan-glow),0 0 30px rgba(6,214,160,.08);
+  border-color:var(--bone);
 }
 .pipe-block .block-header{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .pipe-block .block-name{
-  font-size:13px;font-weight:600;color:var(--cyan);
+  font-size:14px;font-weight:600;color:var(--bone);
   font-family:var(--font-display);letter-spacing:1px;
 }
 .pipe-block .block-remove{
-  width:16px;height:16px;border-radius:50%;background:none;border:none;
-  color:var(--text-dim);cursor:pointer;font-size:11px;
+  width:18px;height:18px;border-radius:2px;background:none;border:none;
+  color:var(--bone-dim);cursor:pointer;font-size:11px;
   display:flex;align-items:center;justify-content:center;
-  transition:all .15s;opacity:0;
+  transition:all .12s;opacity:0;
 }
 .pipe-block:hover .block-remove{opacity:1}
-.pipe-block .block-remove:hover{color:var(--rose);background:var(--rose-dim)}
-.pipe-block .block-excel{font-size:9px;color:var(--text-dim);margin-top:2px}
+.pipe-block .block-remove:hover{color:var(--bone);background:var(--surface-light)}
+.pipe-block .block-excel{font-size:9px;color:var(--bone-dim);margin-top:2px}
 .pipe-block .block-config-preview{
-  font-size:10px;color:var(--amber);margin-top:6px;
+  font-size:10px;color:var(--bone-muted);margin-top:6px;
   max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
 
 /* Connectors */
 .pipe-connector{
-  flex-shrink:0;width:36px;display:flex;align-items:center;justify-content:center;
-  position:relative;height:40px;
+  flex-shrink:0;width:40px;display:flex;align-items:center;justify-content:center;
+  position:relative;height:46px;
 }
 .pipe-connector::before{
-  content:'';position:absolute;top:50%;left:0;right:0;height:2px;
-  background:repeating-linear-gradient(90deg,var(--cyan-dim) 0,var(--cyan-dim) 5px,transparent 5px,transparent 10px);
-  animation:flow .8s linear infinite;
+  content:'';position:absolute;top:50%;left:0;right:0;height:1px;
+  background:var(--border-light);
 }
 .pipe-connector::after{
   content:'';position:absolute;right:-1px;top:50%;transform:translateY(-50%);
-  border:5px solid transparent;border-left:6px solid var(--cyan-dim);
+  border:4px solid transparent;border-left:5px solid var(--border-light);
 }
-@keyframes flow{from{background-position:0 0}to{background-position:10px 0}}
 
 /* File input block */
 .file-block{
-  flex-shrink:0;padding:8px 14px;border-radius:8px;
-  background:var(--bg-surface);border:1px solid var(--border-light);
+  flex-shrink:0;padding:10px 14px;border-radius:4px;
+  background:var(--surface);
+  border:1px solid var(--border);
 }
-.file-block .file-label{font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px}
-.file-block .file-name{font-size:12px;color:var(--amber);margin-top:2px}
+.file-block .file-label{font-size:9px;color:var(--bone-dim);text-transform:uppercase;letter-spacing:1px}
+.file-block .file-name{
+  font-size:13px;color:var(--bone);margin-top:4px;
+  font-family:var(--font-display);letter-spacing:1px;
+}
 
 /* Drop zone at end */
 .drop-zone-end{
-  flex-shrink:0;width:80px;height:70px;border-radius:8px;
-  border:2px dashed var(--border);display:flex;align-items:center;
-  justify-content:center;color:var(--text-dim);font-size:20px;
-  transition:all .2s;margin-left:0;
+  flex-shrink:0;width:80px;height:72px;border-radius:4px;
+  border:1px dashed var(--border);display:flex;align-items:center;
+  justify-content:center;color:var(--bone-dim);font-size:20px;
+  transition:all .15s;margin-left:0;
 }
-.drop-zone-end.drag-over{border-color:var(--cyan);color:var(--cyan);background:rgba(6,214,160,.05)}
-
-/* === BOTTOM SECTION: Config + Preview === */
-#bottom-section{
-  flex:1;display:grid;grid-template-columns:1fr 1fr;
-  overflow:hidden;min-height:0;
-}
-#bottom-section.no-selection{grid-template-columns:0 1fr}
+.drop-zone-end.drag-over{border-color:var(--bone);color:var(--bone)}
 
 /* Config panel */
 #config-panel{
-  background:var(--bg-primary);border-right:1px solid var(--border);
-  padding:16px;overflow-y:auto;transition:all .2s;
+  flex:1;padding:14px;overflow-y:auto;
 }
-#bottom-section.no-selection #config-panel{padding:0;overflow:hidden;opacity:0}
+.panel-empty{
+  margin:12px;padding:14px;border-radius:4px;border:1px dashed var(--border);
+  background:var(--surface);color:var(--bone-dim);line-height:1.6;font-size:12px;
+}
+.panel-empty strong{
+  display:block;margin-bottom:6px;color:var(--bone);font-family:var(--font-display);
+  letter-spacing:1px;font-size:14px;
+}
 .config-title{
   font-family:var(--font-display);font-size:12px;font-weight:600;
-  color:var(--text-dim);letter-spacing:2px;text-transform:uppercase;
-  margin-bottom:14px;display:flex;align-items:center;gap:8px;
+  color:var(--bone-dim);letter-spacing:2px;text-transform:uppercase;
+  margin-bottom:12px;display:flex;align-items:center;gap:8px;
 }
-.config-title .cmd-label{color:var(--cyan);font-size:14px}
-.config-field{margin-bottom:12px}
+.config-title .cmd-label{color:var(--bone);font-size:14px}
+.config-field{margin-bottom:10px}
 .config-field label{
-  display:block;font-size:10px;color:var(--text-muted);
+  display:block;font-size:10px;color:var(--bone-muted);
   letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;
 }
 .config-field input[type="text"],
 .config-field input[type="number"],
 .config-field select{
-  width:100%;padding:7px 10px;border-radius:5px;font-size:12px;
-  font-family:var(--font-mono);color:var(--text);
-  background:var(--bg-card);border:1px solid var(--border);
-  outline:none;transition:border-color .15s;
+  width:100%;padding:7px 10px;border-radius:3px;font-size:12px;
+  font-family:var(--font-mono);color:var(--bone);
+  background:var(--black);border:1px solid var(--border);
+  outline:none;transition:border-color .12s;
 }
-.config-field input:focus,.config-field select:focus{border-color:var(--cyan)}
-.config-field input::placeholder{color:var(--text-dim)}
+.config-field input:focus,.config-field select:focus{border-color:var(--bone)}
+.config-field input::placeholder{color:var(--bone-dim)}
+.config-field select{color:var(--bone);background:var(--black)}
+.config-field select option{background:var(--charcoal);color:var(--bone)}
 .config-help{
-  margin-top:5px;font-size:10px;line-height:1.4;color:var(--text-dim);
+  margin-top:4px;font-size:10px;line-height:1.4;color:var(--bone-dim);
 }
 .config-row{display:flex;gap:8px}
 .config-row .config-field{flex:1}
@@ -215,34 +302,34 @@ body::after{
   display:flex;align-items:center;gap:8px;margin-bottom:8px;
 }
 .config-check input[type="checkbox"]{
-  appearance:none;width:16px;height:16px;border-radius:3px;
-  background:var(--bg-card);border:1px solid var(--border);cursor:pointer;
+  appearance:none;width:14px;height:14px;border-radius:2px;
+  background:var(--black);border:1px solid var(--border);cursor:pointer;
   position:relative;flex-shrink:0;
 }
-.config-check input[type="checkbox"]:checked{background:var(--cyan);border-color:var(--cyan)}
+.config-check input[type="checkbox"]:checked{background:var(--bone);border-color:var(--bone)}
 .config-check input[type="checkbox"]:checked::after{
-  content:'';position:absolute;left:5px;top:2px;width:4px;height:8px;
-  border:solid var(--bg-deep);border-width:0 2px 2px 0;transform:rotate(45deg);
+  content:'';position:absolute;left:4px;top:1px;width:4px;height:8px;
+  border:solid var(--black);border-width:0 2px 2px 0;transform:rotate(45deg);
 }
-.config-check label{font-size:11px;color:var(--text-muted);cursor:pointer}
+.config-check label{font-size:11px;color:var(--bone-muted);cursor:pointer}
 
 /* === DATA PREVIEW === */
 #data-preview{
-  background:var(--bg-secondary);padding:16px;overflow:auto;
+  flex:1;padding:14px;overflow:auto;
 }
 .preview-header{
   display:flex;align-items:center;justify-content:space-between;
-  margin-bottom:10px;
+  margin-bottom:8px;
 }
 .preview-header .preview-label{
   font-family:var(--font-display);font-size:12px;font-weight:600;
-  color:var(--text-dim);letter-spacing:2px;text-transform:uppercase;
+  color:var(--bone-dim);letter-spacing:2px;text-transform:uppercase;
 }
 .preview-header .preview-stage{
-  font-size:10px;color:var(--cyan);
-  background:var(--bg-card);padding:3px 8px;border-radius:4px;
+  font-size:10px;color:var(--bone);
+  background:var(--surface);padding:3px 8px;border-radius:3px;
 }
-.preview-header .row-count{font-size:10px;color:var(--text-dim);margin-left:8px}
+.preview-header .row-count{font-size:10px;color:var(--bone-dim);margin-left:8px}
 #preview-content{
   font-size:11px;line-height:1.6;overflow:auto;
 }
@@ -251,116 +338,165 @@ body::after{
 }
 #preview-content th{
   text-align:left;padding:6px 12px;font-size:10px;
-  color:var(--amber);border-bottom:1px solid var(--border-light);
+  color:var(--bone);border-bottom:1px solid var(--border-light);
   letter-spacing:1px;text-transform:uppercase;font-weight:500;
-  position:sticky;top:0;background:var(--bg-secondary);
+  position:sticky;top:0;background:var(--charcoal);
 }
 #preview-content td{
   padding:5px 12px;border-bottom:1px solid var(--border);
-  color:var(--text);font-size:11px;white-space:nowrap;
+  color:var(--bone);font-size:11px;white-space:nowrap;
 }
-#preview-content tr:hover td{background:var(--bg-card)}
+#preview-content tr:hover td{background:var(--surface)}
 .preview-raw{
-  white-space:pre;color:var(--text);padding:8px;
-  background:var(--bg-card);border-radius:6px;
+  white-space:pre;color:var(--bone);padding:8px;
+  background:var(--surface);border-radius:3px;
   overflow:auto;max-height:300px;font-size:11px;line-height:1.7;
 }
 .preview-raw .line-num{
   display:inline-block;width:28px;text-align:right;
-  color:var(--text-dim);margin-right:12px;user-select:none;
+  color:var(--bone-dim);margin-right:12px;user-select:none;
 }
 
 /* === COMMAND BAR === */
 #command-bar{
-  grid-column:1/-1;background:var(--bg-primary);
-  border-top:1px solid var(--border);padding:10px 20px;
-  display:flex;align-items:center;gap:16px;
+  background:var(--charcoal);
+  border-top:1px solid var(--border);padding:10px 16px;
+  display:flex;align-items:center;gap:14px;border-radius:0;
 }
 .command-label{
   font-family:var(--font-display);font-size:10px;font-weight:600;
-  color:var(--text-dim);letter-spacing:2px;text-transform:uppercase;
+  color:var(--bone-dim);letter-spacing:2px;text-transform:uppercase;
   flex-shrink:0;
 }
-.command-prompt{color:var(--cyan);margin-right:4px}
+.command-prompt{color:var(--bone);margin-right:4px}
 #command-output{
-  flex:1;padding:8px 14px;border-radius:6px;font-size:12px;
-  background:var(--bg-deep);border:1px solid var(--border);
-  color:var(--text);overflow-x:auto;white-space:nowrap;min-height:20px;
+  flex:1;padding:6px 12px;border-radius:3px;font-size:12px;
+  background:var(--black);border:1px solid var(--border);
+  color:var(--bone);overflow-x:auto;white-space:nowrap;min-height:20px;
 }
-#command-output:empty::before{content:'// your pipeline command will appear here';color:var(--text-dim);font-style:italic}
+#command-output:empty::before{content:'// pipeline command';color:var(--bone-dim);font-style:italic}
 #copy-btn{
   font-family:var(--font-display);font-size:12px;font-weight:600;
-  padding:8px 20px;border-radius:6px;cursor:pointer;
-  background:var(--cyan);color:var(--bg-deep);border:none;
+  padding:6px 16px;border-radius:3px;cursor:pointer;
+  background:var(--bone);color:var(--black);border:none;
   letter-spacing:2px;text-transform:uppercase;
-  transition:all .15s;flex-shrink:0;
+  transition:opacity .12s;flex-shrink:0;
 }
-#copy-btn:hover{filter:brightness(1.15);transform:scale(1.03)}
-#copy-btn.copied{background:var(--amber)}
-#copy-btn.failed{background:var(--rose);color:var(--text)}
+#copy-btn:hover{opacity:.85}
+#copy-btn.copied{background:var(--bone-muted)}
+#copy-btn.failed{background:var(--bone-dim);color:var(--bone)}
 
 /* === SCROLLBAR === */
-::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 ::-webkit-scrollbar-thumb:hover{background:var(--border-light)}
 
 /* === ANIMATIONS === */
-@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-.pipe-block{animation:fadeIn .2s ease}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.pipe-block{animation:fadeIn .15s ease}
+
+@media (max-width: 1200px){
+  #topbar{flex-wrap:wrap}
+  .topbar-meta{order:3;justify-content:flex-start;width:100%}
+}
 
 @media (max-width: 960px){
   html,body{overflow:auto}
-  #app{
-    grid-template-columns:1fr;
-    grid-template-rows:auto auto 1fr auto;
-    height:auto;min-height:100vh;
-  }
-  #sidebar{
-    grid-row:auto;
-    border-right:none;border-bottom:1px solid var(--border);
-  }
-  #pipeline-area{padding:14px 16px}
-  #bottom-section,
-  #bottom-section.no-selection{grid-template-columns:1fr}
-  #config-panel{
-    border-right:none;border-bottom:1px solid var(--border);
-    max-height:42vh;
-  }
-  #bottom-section.no-selection #config-panel{display:none}
-  #data-preview{min-height:320px}
-  #command-bar{
-    flex-wrap:wrap;row-gap:10px;
-    padding:12px 14px;
-  }
-  #command-output{
-    order:3;width:100%;
-    white-space:pre-wrap;word-break:break-word;
-  }
+  #app{height:auto;min-height:100vh}
+  #workspace{display:flex;flex-direction:column;padding:0;gap:1px}
+  #library-dock,#inspector-dock,#preview-dock,#center-stage{grid-column:auto;grid-row:auto}
+  .dock-panel{opacity:1}
+  #library-dock:not(.mobile-hidden),
+  #inspector-dock:not(.mobile-hidden),
+  #preview-dock:not(.mobile-hidden){pointer-events:auto}
+  #workspace:not(.has-library) #library-dock,
+  #workspace:not(.has-inspector) #inspector-dock,
+  #workspace:not(.has-preview) #preview-dock{display:none}
+  #topbar{padding:12px 16px}
+  .brand-copy h1{font-size:20px}
+  .stage-header{flex-direction:column;align-items:flex-start}
+  .stage-copy h2{font-size:20px}
+  #pipeline-canvas{min-height:340px;margin:12px;padding:16px}
+  #command-bar{flex-wrap:wrap;row-gap:8px}
+  #command-output{order:3;width:100%;white-space:pre-wrap;word-break:break-word}
   #copy-btn{margin-left:auto}
 }
 </style>
 </head>
 <body>
 <div id="app">
-  <aside id="sidebar">
-    <div class="sidebar-brand">
-      <h1>PIPEFORGE</h1>
-      <p>Pipeline Builder</p>
-    </div>
-    <div id="command-palette"></div>
-  </aside>
-
-  <div id="workspace">
-    <div id="pipeline-area">
-      <div class="pipeline-header">
-        <span>Pipeline</span>
-        <button id="clear-btn" onclick="clearPipeline()">Clear All</button>
+  <header id="topbar">
+    <div class="brand-shell">
+      <div class="brand-mark">PF</div>
+      <div class="brand-copy">
+        <h1>PIPEFORGE</h1>
+        <p>Canvas-first pipeline workshop</p>
       </div>
-      <div id="pipeline-canvas"></div>
     </div>
-    <div id="bottom-section" class="no-selection">
+    <div class="topbar-meta">
+      <div class="meta-chip">
+        <span>Pipeline</span>
+        <strong id="pipeline-count">0 blocks</strong>
+      </div>
+      <div class="meta-chip">
+        <span>Focus</span>
+        <strong id="selection-status">No step selected</strong>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button class="dock-toggle" data-dock="library">Library</button>
+      <button class="dock-toggle" data-dock="inspector">Inspector</button>
+      <button class="dock-toggle" data-dock="preview">Preview</button>
+      <button id="clear-btn" onclick="clearPipeline()">Clear All</button>
+    </div>
+  </header>
+
+  <div id="workspace" class="has-library has-inspector has-preview">
+    <aside id="library-dock" class="dock-panel">
+      <div class="dock-header">
+        <div>
+          <span class="dock-eyebrow">Tool Dock</span>
+          <h2>Command Library</h2>
+        </div>
+        <button class="dock-close" data-dock="library">Hide</button>
+      </div>
+      <div class="dock-subtitle">Drag tools into the canvas or double-click them to add a new stage.</div>
+      <div id="command-palette"></div>
+    </aside>
+
+    <div id="center-stage">
+      <section id="pipeline-area">
+        <div id="pipeline-canvas"></div>
+      </section>
+
+      <footer id="command-bar">
+        <span class="command-label"><span class="command-prompt">$</span> Command</span>
+        <code id="command-output"></code>
+        <button id="copy-btn" onclick="copyCommand()">Copy</button>
+      </footer>
+    </div>
+
+    <aside id="inspector-dock" class="dock-panel">
+      <div class="dock-header">
+        <div>
+          <span class="dock-eyebrow">Inspector</span>
+          <h2>Step Settings</h2>
+        </div>
+        <button class="dock-close" data-dock="inspector">Hide</button>
+      </div>
+      <div class="dock-subtitle">Select a block on the canvas to tune flags, fields, and output behavior.</div>
       <div id="config-panel"></div>
+    </aside>
+
+    <section id="preview-dock" class="dock-panel">
+      <div class="dock-header">
+        <div>
+          <span class="dock-eyebrow">Preview Dock</span>
+          <h2>Data Preview</h2>
+        </div>
+        <button class="dock-close" data-dock="preview">Hide</button>
+      </div>
       <div id="data-preview">
         <div class="preview-header">
           <div style="display:flex;align-items:center;gap:8px">
@@ -371,14 +507,8 @@ body::after{
         </div>
         <div id="preview-content"></div>
       </div>
-    </div>
+    </section>
   </div>
-
-  <footer id="command-bar">
-    <span class="command-label"><span class="command-prompt">$</span> Command</span>
-    <code id="command-output"></code>
-    <button id="copy-btn" onclick="copyCommand()">Copy</button>
-  </footer>
 </div>
 
 <script>
@@ -490,6 +620,16 @@ const COMMANDS = {
       {key:'filename',type:'text',label:'Save to file',placeholder:'output.csv'},
     ]
   },
+  xargs: {
+    label:'xargs', excel:'Apply to each item', group:'output',
+    icon:'Xa', defaults:{command:'echo',placeholder:false,replaceStr:'{}',maxArgs:''},
+    config:[
+      {key:'command',type:'text',label:'Command to run',placeholder:'e.g. echo, wc -l, rm'},
+      {key:'placeholder',type:'check',label:'Use replacement string (-I)'},
+      {key:'replaceStr',type:'text',label:'Replace string',placeholder:'{}'},
+      {key:'maxArgs',type:'text',label:'Max args per call (-n)',placeholder:'e.g. 1'},
+    ]
+  },
 };
 
 const GROUPS = [
@@ -515,9 +655,42 @@ const SAMPLE_DATA = `date,product,region,amount
 let state = {
   pipeline: [],  // [{id, type, config}]
   selectedId: null,
+  layout: {
+    library: true,
+    inspector: true,
+    preview: true,
+  },
   nextId: 1,
 };
 let copyBtnResetTimer = null;
+
+// ===== LAYOUT =====
+function setupLayoutControls() {
+  document.querySelectorAll('[data-dock]').forEach(btn => {
+    btn.addEventListener('click', () => toggleDock(btn.dataset.dock));
+  });
+}
+
+function toggleDock(name) {
+  state.layout[name] = !state.layout[name];
+  renderLayout();
+}
+
+function renderLayout() {
+  const workspace = document.getElementById('workspace');
+  workspace.classList.toggle('has-library', !!state.layout.library);
+  workspace.classList.toggle('has-inspector', !!state.layout.inspector);
+  workspace.classList.toggle('has-preview', !!state.layout.preview);
+
+  document.querySelectorAll('.dock-toggle').forEach(btn => {
+    btn.classList.toggle('active', !!state.layout[btn.dataset.dock]);
+  });
+
+  const count = state.pipeline.length;
+  document.getElementById('pipeline-count').textContent = `${count} block${count !== 1 ? 's' : ''}`;
+  const selected = state.pipeline.find(b => b.id === state.selectedId);
+  document.getElementById('selection-status').textContent = selected ? COMMANDS[selected.type].label : 'No step selected';
+}
 
 // ===== RENDER SIDEBAR =====
 function renderSidebar() {
@@ -634,16 +807,18 @@ function setupCanvasDrop() {
 // ===== CONFIG PANEL =====
 function renderConfig() {
   const panel = document.getElementById('config-panel');
-  const section = document.getElementById('bottom-section');
   const block = state.pipeline.find(b => b.id === state.selectedId);
 
   if (!block) {
-    section.classList.add('no-selection');
-    panel.innerHTML = '';
+    panel.innerHTML = `
+      <div class="panel-empty">
+        <strong>No step selected</strong>
+        Click a block on the canvas to edit its flags and arguments. The canvas stays primary; the inspector only fills in the details when you need them.
+      </div>
+    `;
     return;
   }
 
-  section.classList.remove('no-selection');
   const cmd = COMMANDS[block.type];
   if (block.type === 'awk') syncAwkConditionPreset(block);
 
@@ -721,6 +896,7 @@ function getConfigPreview(block) {
     case 'sed': return c.pattern ? `s/${c.pattern}/${c.replacement}/` : '';
     case 'tr': return c.from ? `'${c.from}' '${c.to}'` : '';
     case 'tee': return c.filename || '';
+    case 'xargs': return c.command ? `${c.placeholder ? `-I${c.replaceStr || '{}'} ` : ''}${c.command}` : '';
     case 'wc': return [c.lines&&'-l',c.words&&'-w',c.chars&&'-c'].filter(Boolean).join(' ') || '-l';
     default: return '';
   }
@@ -818,6 +994,15 @@ function generateCommand() {
       }
       case 'tee': {
         cmd = `tee ${shellQuote(c.filename || 'output.csv')}`;
+        if (isFirst) cmd = `cat ${file} | ${cmd}`;
+        break;
+      }
+      case 'xargs': {
+        let flags = [];
+        if (c.placeholder && c.replaceStr) flags.push(`-I${shellQuote(c.replaceStr)}`);
+        if (c.maxArgs) flags.push(`-n${c.maxArgs}`);
+        const target = c.command || 'echo';
+        cmd = ['xargs', ...flags, target].join(' ');
         if (isFirst) cmd = `cat ${file} | ${cmd}`;
         break;
       }
@@ -941,6 +1126,20 @@ function simulateStep(lines, block) {
         });
       }
       case 'tee': return lines;
+      case 'xargs': {
+        const target = c.command || 'echo';
+        if (c.placeholder && c.replaceStr) {
+          return lines.map(line => target.includes(c.replaceStr)
+            ? target.replace(c.replaceStr, line)
+            : `${target} ${line}`);
+        }
+        const n = c.maxArgs ? (parseInt(c.maxArgs) || 1) : lines.length;
+        const result = [];
+        for (let i = 0; i < lines.length; i += n) {
+          result.push(`${target} ${lines.slice(i, i + n).join(' ')}`);
+        }
+        return result;
+      }
       case 'wc': {
         const parts = [];
         if (c.lines || (!c.words && !c.chars)) parts.push(String(lines.length));
@@ -1095,6 +1294,8 @@ function addBlock(type) {
     type,
     config: { ...cmd.defaults },
   });
+  state.layout.inspector = true;
+  state.layout.preview = true;
   selectBlock(state.pipeline[state.pipeline.length - 1].id);
 }
 
@@ -1106,6 +1307,7 @@ function removeBlock(id) {
 
 function selectBlock(id) {
   state.selectedId = state.selectedId === id ? null : id;
+  if (state.selectedId !== null) state.layout.inspector = true;
   renderAll();
 }
 
@@ -1116,6 +1318,7 @@ function clearPipeline() {
 }
 
 function renderAll() {
+  renderLayout();
   renderPipeline();
   renderConfig();
   renderCommand();
@@ -1178,6 +1381,7 @@ function escAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot
 
 // ===== INIT =====
 renderSidebar();
+setupLayoutControls();
 setupCanvasDrop();
 renderAll();
 </script>
